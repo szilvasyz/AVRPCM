@@ -195,7 +195,7 @@ int PCM_pushBuf() {
       if (PCM_ampCnt-- == 0) {
         PCM_ampCnt = PCM_NRMSMP;
         PCM_ampMul--;
-        Serial.print(PCM_ampMul);
+        // Serial.print(PCM_ampMul);
         PCM_ampOfs += (PCM_OFFSET >> 2);
       }
     }

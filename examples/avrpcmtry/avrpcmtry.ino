@@ -3,6 +3,7 @@
 
 #include "AVRPCM.h"
 #include "mybutton.h"
+#include "WAVhdr.h"
 
 #define DIG_OUTPIN  6
 
@@ -28,6 +29,7 @@ SdFat sd;
 #endif
 
 File dataFile;
+WAVhdr W;
 
 
 void setup() {
@@ -70,6 +72,9 @@ void setup() {
 
 void loop() {
   int b;
+  uint16_t sr = 48000;
+  uint32_t ds = 0, ss = 0;
+  int pct;
   
   while (btn.get() == 0);
 
@@ -80,8 +85,27 @@ void loop() {
   dataFile.open("j2test.wav", O_RDONLY);
 #endif
 
+  if (dataFile.available()) {
+    Serial.println();
+    dataFile.read(W.getBuffer(), WAVHDR_LEN);
+    if (W.processBuffer()) {
+      Serial.print("samplerate=");
+      Serial.println(W.getData().sampleRate);
+      Serial.print("bitsPerSample=");
+      Serial.println(W.getData().bitsPerSample);
+      Serial.print("numChannels=");
+      Serial.println(W.getData().numChannels);
+      Serial.print("dataSize=");
+      Serial.println(W.getData().dataSize);
+      sr = W.getData().sampleRate;
+      ds = W.getData().dataSize;
+    }
+    else {
+      Serial.println("unknown file");
+    }
+  }
   Serial.print("Setup: ");
-  Serial.println(PCM_setupPWM(48000, 0));
+  Serial.println(PCM_setupPWM(sr, 0));
   Serial.print("Start play: ");
   Serial.println(PCM_startPlay(true));
   
@@ -92,9 +116,15 @@ void loop() {
   while (dataFile.available()) {
     dataFile.read(PCM_getBuf(), PCM_BUFSIZ);
     PCM_pushBuf();
+    ss += PCM_BUFSIZ;
+    pct = 100 * ss / ds;
+    Serial.print(pct);
+    Serial.print("%\x0d");
   }
   
   dataFile.close();
+  Serial.println("Done.");
+
   Serial.print("Stop play: ");
   Serial.println(PCM_stop());
 
