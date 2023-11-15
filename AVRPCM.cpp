@@ -82,9 +82,9 @@ void PCM_ISR() {
 
   OCR1A = d;
   if (d > PCM_pwmOfs)
-    *PCM_digOutPort &= PCM_digOutMask;
+    *PCM_digOutPort |= PCM_digOutMask;
   else
-    *PCM_digOutPort |= ~PCM_digOutMask;
+    *PCM_digOutPort &= ~PCM_digOutMask;
 }
 
 
@@ -135,9 +135,7 @@ int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
   OCR1A = PCM_pwmOfs;
   TIMSK1 = _BV(TOIE1);
 
-  // PCM_ampMul = (PCM_pwmTop + 1) * 4 / 256;
   PCM_ampMul = PCM_pwmTop * 2 / PCM_MAXVAL;
-  // PCM_ampOfs = (4 - PCM_ampMul) * (PCM_OFFSET >> 2) + PCM_pwmOfs - PCM_OFFSET;
   PCM_ampOfs = ((PCM_ampMul * PCM_OFFSET) >> 2) - PCM_pwmOfs;
 
   PCM_OVFHandler = PCM_ISR;
@@ -167,7 +165,6 @@ int PCM_startPlay(uint8_t normalize) {
   if (normalize) {
     PCM_ampMul = PCM_AMPMAX;
     PCM_ampOfs = ((PCM_ampMul * PCM_OFFSET) >> 2) - PCM_pwmOfs;
-    // PCM_ampOfs = (4 - PCM_ampMul) * (PCM_OFFSET >> 2) + PCM_pwmOfs - PCM_OFFSET;
     PCM_ampCnt = PCM_NRMSMP;
   }
   
