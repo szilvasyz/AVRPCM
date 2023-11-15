@@ -8,7 +8,7 @@ volatile uint8_t *PCM_digOutPort;
 uint8_t PCM_digOutMask;
 
 // PWM generation
-volatile uint8_t PCM_pwmMul = 1;
+volatile uint16_t PCM_pwmMul = 1;
 volatile uint16_t PCM_pwmOfs = 128;
 uint16_t PCM_pwmTop;
 uint16_t PCM_sampleRate;
@@ -66,12 +66,12 @@ void PCM_ISR() {
       fRatio = 0;
       fSNum = PCM_fSMax;
     }
-    d += (PCM_ampMul * PCM_dataBuf[0][fRatio >> PCM_fShft]) >> 2;
+    d = ((PCM_ampMul * PCM_dataBuf[0][fRatio >> PCM_fShft]) >> 2) - PCM_ampOfs;
   }
   
   if (PCM_playing) {
     if (PCM_busyBuf[PCM_bufSel] == 1) {
-      d += (PCM_ampMul * PCM_dataBuf[PCM_bufSel][PCM_bufPtr]) >> 2;
+      d = ((PCM_ampMul * PCM_dataBuf[PCM_bufSel][PCM_bufPtr]) >> 2) - PCM_ampOfs;
       if (++PCM_bufPtr == PCM_BUFSIZ) {
         PCM_bufPtr = 0;
         PCM_busyBuf[PCM_bufSel++] = 0;
@@ -135,8 +135,10 @@ int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
   OCR1A = PCM_pwmOfs;
   TIMSK1 = _BV(TOIE1);
 
-  PCM_ampMul = (PCM_pwmTop + 1) * 4 / 256;
-  PCM_ampOfs = (4 - PCM_ampMul) * (PCM_OFFSET >> 2) + PCM_pwmOfs - PCM_OFFSET;
+  // PCM_ampMul = (PCM_pwmTop + 1) * 4 / 256;
+  PCM_ampMul = PCM_pwmTop * 2 / PCM_MAXVAL;
+  // PCM_ampOfs = (4 - PCM_ampMul) * (PCM_OFFSET >> 2) + PCM_pwmOfs - PCM_OFFSET;
+  PCM_ampOfs = ((PCM_ampMul * PCM_OFFSET) >> 2) - PCM_pwmOfs;
 
   PCM_OVFHandler = PCM_ISR;
   PCM_running = true;
@@ -164,7 +166,8 @@ int PCM_startPlay(uint8_t normalize) {
   
   if (normalize) {
     PCM_ampMul = PCM_AMPMAX;
-    PCM_ampOfs = (4 - PCM_ampMul) * (PCM_OFFSET >> 2) + PCM_pwmOfs - PCM_OFFSET;
+    PCM_ampOfs = ((PCM_ampMul * PCM_OFFSET) >> 2) - PCM_pwmOfs;
+    // PCM_ampOfs = (4 - PCM_ampMul) * (PCM_OFFSET >> 2) + PCM_pwmOfs - PCM_OFFSET;
     PCM_ampCnt = PCM_NRMSMP;
   }
   
@@ -173,7 +176,7 @@ int PCM_startPlay(uint8_t normalize) {
 }
 
 
-void *PCM_getBuf() {
+uint8_t *PCM_getBuf() {
   while (PCM_playing && PCM_busyBuf[PCM_bufWrt]);
   return PCM_dataBuf[PCM_bufWrt];
 }
@@ -195,8 +198,8 @@ int PCM_pushBuf() {
       if (PCM_ampCnt-- == 0) {
         PCM_ampCnt = PCM_NRMSMP;
         PCM_ampMul--;
-        // Serial.print(PCM_ampMul);
-        PCM_ampOfs += (PCM_OFFSET >> 2);
+        // Serial.println(PCM_ampMul);
+        PCM_ampOfs -= (PCM_OFFSET >> 2);
       }
     }
   }

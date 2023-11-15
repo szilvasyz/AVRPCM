@@ -49,7 +49,7 @@ void PCM_ISR();
 int PCM_init(int digOutPin);
 int PCM_setupPWM(uint16_t sampleRate, uint8_t invert);
 int PCM_startPlay(uint8_t normalize);
-void *PCM_getBuf();
+uint8_t *PCM_getBuf();
 int PCM_pushBuf();
 int PCM_startGen(uint16_t frequency, uint8_t ampPercent, uint8_t waveForm);
 int PCM_stop();
