@@ -4,7 +4,7 @@
 #include "SdFat.h"
 
 #define SD_CS 4
-#define SD_FAT_TYPE 0
+#define SD_FAT_TYPE 1
 #define SPI_CLOCK SD_SCK_MHZ(20)
 #define SD_CONFIG SdSpiConfig(SD_CS, DEDICATED_SPI, SPI_CLOCK)
 
@@ -20,74 +20,22 @@
 
 
 #define INIT_TRY 5
+#define NAME_LEN 32
+#define PRINT_LEN 60
+
 
 MyButton btn(BT1_PIN, BT2_PIN);
 SdFat sd;
-File dataFile;
 WAVhdr W;
 
 
 int sdready = false;
+File32 dir;
+File32 file;
+File32 dataFile;
+char nBuf[NAME_LEN] = "12345678ABC";
+char sBuf[PRINT_LEN];
 
-
-void playfile() {
-  uint16_t sr = 48000;
-  uint32_t ds = 0, ss = 0;
-  int pct;
-  int pct0 = 0;
-
-  dataFile.open("chaos.wav", O_RDONLY);
-
-  if (dataFile.available()) {
-    Serial.println();
-    dataFile.read(W.getBuffer(), WAVHDR_LEN);
-    if (W.processBuffer()) {
-      Serial.print("samplerate=");
-      Serial.println(W.getData().sampleRate);
-      Serial.print("bitsPerSample=");
-      Serial.println(W.getData().bitsPerSample);
-      Serial.print("numChannels=");
-      Serial.println(W.getData().numChannels);
-      Serial.print("dataSize=");
-      Serial.println(W.getData().dataSize);
-      sr = W.getData().sampleRate;
-      ds = W.getData().dataSize;
-
-      Serial.print("Setup: ");
-      Serial.println(PCM_setupPWM(sr, 0));
-      Serial.print("Start play: ");
-      Serial.println(PCM_startPlay(true));
-      
-    //  do {
-    //    b = PCM_doSDPlay(&dataFile);
-    //  } while (b);
-    
-      while (ss < ds) {
-        dataFile.read(PCM_getBuf(), PCM_BUFSIZ);
-        PCM_pushBuf();
-        ss += PCM_BUFSIZ;
-        pct = 100 * ss / ds;
-        if (pct != pct0 && (pct % 10) == 0) {
-          pct0 = pct;
-          Serial.print(pct);
-          Serial.print("%\r");
-        }
-      }
-      
-      dataFile.close();
-    }
-    else {
-      Serial.println("unknown file");
-    }
-  }
-  else
-    Serial.println("File not available.");
-
-  Serial.println("Done.");
-
-  Serial.print("Stop play: ");
-  Serial.println(PCM_stop());
-}
 
 void setup() {
   int init_cnt = INIT_TRY;
@@ -120,13 +68,131 @@ void setup() {
   Serial.print("Buttons: ");
   Serial.println(btn.count());
   
+  if (!dir.open("/")) {
+    Serial.println("Error opening root");
+    while(true);
+  }
 }
+
 
 void loop() {
   int b;
   
-  while (btn.peek() == 0);
-  Serial.print(btn.get());
-  Serial.print(' ');
-  
+  if ((b = findNextWav()) == -1) {
+    Serial.println("No more files");
+    while (btn.get() == 0);
+    dir.rewindDirectory();
+    return;
+  }
+
+  dataFile.open(b, O_RDONLY);
+
+  while (true) {
+
+    if ((b = dataFile.getName(nBuf,20)) == 0)
+      b = dataFile.getSFN(nBuf,20);
+
+    sprintf(sBuf, "%3d %10ld %s (", dataFile.dirIndex(), dataFile.size(), nBuf);
+    Serial.print(sBuf);
+    wavInfo(&dataFile);
+    Serial.println(")");
+
+    while (true) {
+      b = btn.get();
+      if (b == 1) {
+        playFile(&dataFile);
+        break;
+      }
+      if (b == 2) {
+        dataFile.close();
+        return;
+      }
+    }
+  }  
+}
+
+
+void wavInfo(File32 *f) {
+
+  f->rewind();
+  f->read(W.getBuffer(), WAVHDR_LEN);
+  W.processBuffer();
+
+  sprintf(sBuf, "sr:%u ch:%d bits:%d", 
+    (uint16_t)W.getData().sampleRate,
+    (uint16_t)W.getData().numChannels,
+    (uint16_t)W.getData().bitsPerSample);
+  Serial.print(sBuf);
+
+}
+
+
+int findNextWav() {
+  char b[13];
+  int l;
+  int i;
+
+  while (file.openNext(&dir, O_RDONLY)) {
+    l = file.getSFN(b, 13);
+    i = file.dirIndex();
+    file.close();
+    delay(1);
+
+    if ((strcasecmp("WAV", b + l - 3) == 0) && (b[0] != '_')) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+
+void playFile(File32 *f) {
+  uint16_t sr = 48000;
+  uint32_t ds = 0, ss = 0;
+  int pct;
+  int pct0 = 0;
+
+  f->rewind();
+  if (f->available()) {
+    f->read(W.getBuffer(), WAVHDR_LEN);
+    if (W.processBuffer()) {
+      sr = W.getData().sampleRate;
+      ds = W.getData().dataSize;
+
+      Serial.print("Setup: ");
+      Serial.println(PCM_setupPWM(sr, 0));
+      Serial.print("Start play: ");
+      Serial.println(PCM_startPlay(true));
+      
+      while (ss < ds) {
+        f->read(PCM_getBuf(), PCM_BUFSIZ);
+        PCM_pushBuf();
+        ss += PCM_BUFSIZ;
+        pct = 100 * ss / ds;
+        if (pct != pct0) {
+          pct0 = pct;
+          if (((pct % 10) % 3) == 1) Serial.print(".");
+          if ((pct % 10) == 0) {
+            Serial.print(pct);
+            Serial.print("%");
+          }
+        }
+        if (btn.get() != 0) {
+          Serial.print(" -break-");
+          break;
+        }
+      }
+      Serial.println();
+    }
+    else {
+      Serial.println("Invalid file.");
+    }
+  }
+  else
+    Serial.println("File not available.");
+
+  Serial.println("Done.");
+
+  Serial.print("Stop play: ");
+  Serial.println(PCM_stop());
 }
