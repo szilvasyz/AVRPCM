@@ -92,10 +92,15 @@ void loop() {
     if ((b = dataFile.getName(nBuf,20)) == 0)
       b = dataFile.getSFN(nBuf,20);
 
-    sprintf(sBuf, "%3d %10ld %s (", dataFile.dirIndex(), dataFile.size(), nBuf);
+    sprintf(sBuf, "%3d %10ld %s ", dataFile.dirIndex(), dataFile.size(), nBuf);
     Serial.print(sBuf);
     wavInfo(&dataFile);
-    Serial.println(")");
+    sprintf(sBuf, "(sr:%u ch:%d bits:%d start:%lu)", 
+      (uint16_t)W.getData().sampleRate,
+      (uint16_t)W.getData().numChannels,
+      (uint16_t)W.getData().bitsPerSample,
+      (uint32_t)W.getData().dataPos);
+    Serial.println(sBuf);
 
     while (true) {
       b = btn.get();
@@ -111,19 +116,15 @@ void loop() {
   }  
 }
 
+File32 *ff;
 
-void wavInfo(File32 *f) {
+size_t readHandler(uint8_t *b, size_t s) {
+  return ff->readBytes(b, s);
+}
 
-  f->rewind();
-  f->read(W.getBuffer(), WAVHDR_LEN);
-  W.processBuffer();
-
-  sprintf(sBuf, "sr:%u ch:%d bits:%d", 
-    (uint16_t)W.getData().sampleRate,
-    (uint16_t)W.getData().numChannels,
-    (uint16_t)W.getData().bitsPerSample);
-  Serial.print(sBuf);
-
+int wavInfo(File32 *f) {
+  ff = f;
+  return W.processBuffer(readHandler);
 }
 
 
@@ -154,8 +155,7 @@ void playFile(File32 *f) {
 
   f->rewind();
   if (f->available()) {
-    f->read(W.getBuffer(), WAVHDR_LEN);
-    if (W.processBuffer()) {
+    if (wavInfo(f)) {
       sr = W.getData().sampleRate;
       ds = W.getData().dataSize;
 
