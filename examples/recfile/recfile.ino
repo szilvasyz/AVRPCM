@@ -99,17 +99,6 @@ void loop() {
   recNo++;
 }
 
-File32 *ff;
-
-size_t readHandler(uint8_t *b, size_t s) {
-  return ff->readBytes(b, s);
-}
-
-int wavInfo(File32 *f) {
-  ff = f;
-  return W.processBuffer(readHandler);
-}
-
 
 void recFile(File32 *f) {
   uint16_t sr = REC_SAMPLE_RATE;
