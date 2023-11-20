@@ -3,6 +3,10 @@
 #include "WAVhdr.h"
 #include "SdFat.h"
 
+
+#define REC_SAMPLE_RATE 16000
+
+
 #define SD_CS 4
 #define SD_FAT_TYPE 1
 #define SPI_CLOCK SD_SCK_MHZ(20)
@@ -108,10 +112,13 @@ int wavInfo(File32 *f) {
 
 
 void recFile(File32 *f) {
-  uint16_t sr = 16000;
+  uint16_t sr = REC_SAMPLE_RATE;
   uint32_t ds = 0, ss = 0;
 
   if (f->isWritable()) {
+    W.createBuffer(sr, 1, 8);
+    f->write(W.getBuffer(), WAVHDR_LEN);
+
     Serial.print("Setup: ");
     Serial.println(PCM_setupPWM(sr, 0));
     Serial.print("Start recording: ");
@@ -120,10 +127,10 @@ void recFile(File32 *f) {
     while (btn.get() == 0) {
       f->write(PCM_getRecBuf(), PCM_BUFSIZ);
       PCM_releaseRecBuf();
-      ss += PCM_BUFSIZ;
-      if ((++ds % 10) == 0) {
+      ss += PCM_BUFSIZ;      
+      if ((++ds % 100) == 0) {
         Serial.print(".");
-        if (ds >= 400) {
+        if (ds >= 4000) {
           Serial.println("!");
           ds = 0;
         }
@@ -132,13 +139,15 @@ void recFile(File32 *f) {
   }
   else
     Serial.println("File not available.");
-
   Serial.println("Done.");
-  f->truncate(ss);
 
   Serial.print("Stop recording: ");
   Serial.println(PCM_stop());
   sprintf(sBuf, "%0ld bytes written.", ss);
   Serial.println(sBuf);
 
+  W.finalizeBuffer(ss);
+  f->seekSet(0);
+  f->write(W.getBuffer(), WAVHDR_LEN);
+  f->truncate(ss + WAVHDR_LEN);
 }

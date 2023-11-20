@@ -255,7 +255,7 @@ int PCM_startRec(uint8_t normalize) {
 
 
 uint8_t *PCM_getRecBuf() {
-  while (PCM_recording && !PCM_busyBuf[PCM_bufWrt]);
+  while (PCM_recording && PCM_busyBuf[PCM_bufWrt] == 0);
   return PCM_dataBuf[PCM_bufWrt];
 }
 
