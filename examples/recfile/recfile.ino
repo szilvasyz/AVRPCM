@@ -71,7 +71,7 @@ void setup() {
   }
 
   Serial.print("Init: ");
-  Serial.println(PCM_init(DIG_OUTPIN));
+  Serial.println(PCM_init(DIG_OUTPIN, ANA_INPIN));
   Serial.print("Buttons: ");
   Serial.println(btn.count());
 
@@ -97,17 +97,6 @@ void loop() {
   recFile(&dataFile);
   dataFile.close();
   recNo++;
-}
-
-File32 *ff;
-
-size_t readHandler(uint8_t *b, size_t s) {
-  return ff->readBytes(b, s);
-}
-
-int wavInfo(File32 *f) {
-  ff = f;
-  return W.processBuffer(readHandler);
 }
 
 
