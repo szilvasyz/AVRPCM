@@ -46,11 +46,14 @@ ISR(TIMER1_OVF_vect);
 void PCM_ISRDummy();
 void PCM_ISR();
 
-int PCM_init(int digOutPin);
+int PCM_init(int digOutPin, int anaInPin = A0);
 int PCM_setupPWM(uint16_t sampleRate, uint8_t invert);
 int PCM_startPlay(uint8_t normalize);
-uint8_t *PCM_getBuf();
-int PCM_pushBuf();
+uint8_t *PCM_getPlayBuf();
+int PCM_pushPlayBuf();
+int PCM_startRec(uint8_t normalize);
+uint8_t *PCM_getRecBuf();
+int PCM_releaseRecBuf();
 int PCM_startGen(uint16_t frequency, uint8_t ampPercent, uint8_t waveForm);
 int PCM_stop();
 

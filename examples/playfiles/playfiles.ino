@@ -47,9 +47,9 @@ void setup() {
 
   pinMode(SD_CS, OUTPUT);
   digitalWrite(SD_CS, HIGH);
-  
+
   delay(1000);
-  
+
   while (!(sdready = sd.begin(SD_CONFIG)) && init_cnt--) {
     Serial.print("#");
     digitalWrite(SD_CS, HIGH);
@@ -67,7 +67,7 @@ void setup() {
   Serial.println(PCM_init(DIG_OUTPIN));
   Serial.print("Buttons: ");
   Serial.println(btn.count());
-  
+
   if (!dir.open("/")) {
     Serial.println("Error opening root");
     while(true);
@@ -77,7 +77,7 @@ void setup() {
 
 void loop() {
   int b;
-  
+
   if ((b = findNextWav()) == -1) {
     Serial.println("No more files");
     while (btn.get() == 0);
@@ -95,7 +95,7 @@ void loop() {
     sprintf(sBuf, "%3d %10ld %s ", dataFile.dirIndex(), dataFile.size(), nBuf);
     Serial.print(sBuf);
     wavInfo(&dataFile);
-    sprintf(sBuf, "(sr:%u ch:%d bits:%d start:%lu)", 
+    sprintf(sBuf, "(sr:%u ch:%d bits:%d start:%lu)",
       (uint16_t)W.getData().sampleRate,
       (uint16_t)W.getData().numChannels,
       (uint16_t)W.getData().bitsPerSample,
@@ -113,7 +113,7 @@ void loop() {
         return;
       }
     }
-  }  
+  }
 }
 
 File32 *ff;
@@ -163,10 +163,10 @@ void playFile(File32 *f) {
       Serial.println(PCM_setupPWM(sr, 0));
       Serial.print("Start play: ");
       Serial.println(PCM_startPlay(true));
-      
+
       while (ss < ds) {
-        f->read(PCM_getBuf(), PCM_BUFSIZ);
-        PCM_pushBuf();
+        f->read(PCM_getPlayBuf(), PCM_BUFSIZ);
+        PCM_pushPlayBuf();
         ss += PCM_BUFSIZ;
         pct = 100 * ss / ds;
         if (pct != pct0) {

@@ -123,8 +123,8 @@ void loop() {
     //  } while (b);
     
       while (ss < ds) {
-        dataFile.read(PCM_getBuf(), PCM_BUFSIZ);
-        PCM_pushBuf();
+        dataFile.read(PCM_getPlayBuf(), PCM_BUFSIZ);
+        PCM_pushPlayBuf();
         ss += PCM_BUFSIZ;
         pct = 100 * ss / ds;
         if (pct != pct0 && (pct % 10) == 0) {

@@ -6,13 +6,14 @@ int PCM_digOutPin;
 int PCM_anaOutPin;
 volatile uint8_t *PCM_digOutPort;
 uint8_t PCM_digOutMask;
+uint8_t PCM_anaInChannel;
 
 // PWM generation
 volatile uint16_t PCM_pwmMul = 1;
 volatile uint16_t PCM_pwmOfs = 128;
 uint16_t PCM_pwmTop;
 uint16_t PCM_sampleRate;
-  
+
 // PWM amplifying/normalizing
 volatile uint16_t PCM_ampMul = 4;
 volatile uint16_t PCM_ampOfs = 128;
@@ -34,6 +35,7 @@ volatile uint16_t PCM_fShft;
 
 // modes
 volatile uint8_t PCM_playing = false;
+volatile uint8_t PCM_recording = false;
 volatile uint8_t PCM_generating = false;
 uint8_t PCM_running = false;
 
@@ -54,9 +56,9 @@ void PCM_ISR() {
   static uint8_t pwmCnt = 1;
   static uint16_t fRatio = 0;
   static uint16_t fSNum = 1;
-  
+
   uint16_t d = PCM_pwmOfs;
-  
+
   if (--pwmCnt != 0) return;
   pwmCnt = PCM_pwmMul;
 
@@ -68,7 +70,7 @@ void PCM_ISR() {
     }
     d = ((PCM_ampMul * PCM_dataBuf[0][fRatio >> PCM_fShft]) >> 2) - PCM_ampOfs;
   }
-  
+
   if (PCM_playing) {
     if (PCM_busyBuf[PCM_bufSel] == 1) {
       d = ((PCM_ampMul * PCM_dataBuf[PCM_bufSel][PCM_bufPtr]) >> 2) - PCM_ampOfs;
@@ -80,15 +82,29 @@ void PCM_ISR() {
     }
   }
 
-  OCR1A = d;
-  if (d > PCM_pwmOfs)
-    *PCM_digOutPort |= PCM_digOutMask;
-  else
-    *PCM_digOutPort &= ~PCM_digOutMask;
+  if (PCM_recording) {
+    if (PCM_busyBuf[PCM_bufSel] == 0) {
+      d = ADCH;
+      PCM_dataBuf[PCM_bufSel][PCM_bufPtr] = d;
+      if (++PCM_bufPtr == PCM_BUFSIZ) {
+        PCM_bufPtr = 0;
+        PCM_busyBuf[PCM_bufSel++] = 1;
+        if (PCM_bufSel == PCM_NUMBUF) PCM_bufSel = 0;
+      }
+    }
+  }
+
+  if (PCM_generating || PCM_playing) {
+    OCR1A = d;
+    if (d > PCM_pwmOfs)
+      *PCM_digOutPort |= PCM_digOutMask;
+    else
+      *PCM_digOutPort &= ~PCM_digOutMask;
+  }
 }
 
 
-int PCM_init(int digOutPin) {
+int PCM_init(int digOutPin, int anaInPin = A0) {
 
   PCM_anaOutPin  = PCM_ANAOUT;
   pinMode(PCM_ANAOUT, OUTPUT);
@@ -96,23 +112,30 @@ int PCM_init(int digOutPin) {
   PCM_digOutPin  = digOutPin;
   pinMode(digOutPin, OUTPUT);
 
+  PCM_anaInChannel = analogPinToChannel(anaInPin);
+  pinMode(anaInPin, INPUT);
+  DIDR0 |= _BV(PCM_anaInChannel);
+  ADCSRB = 0;
+  ADMUX  = PCM_anaInChannel | _BV(ADLAR);
+  ADCSRA = _BV(ADEN) | _BV(ADSC) | _BV(ADATE) | _BV(ADPS2) | _BV(ADPS0);
+
   // for fast register-level access
   PCM_digOutPort = portOutputRegister(digitalPinToPort(digOutPin));
   PCM_digOutMask = digitalPinToBitMask(digOutPin);
-  
+
   return true;
 }
 
 
 int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
   uint16_t pwmFrq;
-  
+
   PCM_sampleRate = sampleRate;
-  
+
   PCM_pwmMul = 48000 / sampleRate;
   if (PCM_pwmMul == 0) PCM_pwmMul = 1;
   pwmFrq = PCM_pwmMul * sampleRate;
-  if (pwmFrq > F_CPU / 256) 
+  if (pwmFrq > F_CPU / 256)
     return false;
 
   PCM_pwmTop = F_CPU / pwmFrq - 1;
@@ -125,11 +148,11 @@ int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
   ICR1 = PCM_pwmTop;
   if (invert) {
     TCCR1A = _BV(COM1A1) | _BV(COM1A0) | _BV(WGM11);
-  } 
+  }
   else {
     TCCR1A = _BV(COM1A1) | _BV(WGM11);
   }
-  
+
   TCCR1B = _BV(CS10) | _BV(WGM13) | _BV(WGM12);
   TCCR1C = 0;
   OCR1A = PCM_pwmOfs;
@@ -146,9 +169,9 @@ int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
 
 int PCM_startPlay(uint8_t normalize) {
   uint16_t b,c;
-  
+
   if (!PCM_running) return false;
-  
+
   // amppwm = MAXAMP;
   // ampofs = (4 - amppwm) * (OFFSET >> 2) + pwmofs - OFFSET;
   // ampcnt = NRMSMP;
@@ -161,29 +184,29 @@ int PCM_startPlay(uint8_t normalize) {
   PCM_bufWrt = 0;
   PCM_bufPtr = 0;
   PCM_normalize = normalize;
-  
+
   if (normalize) {
     PCM_ampMul = PCM_AMPMAX;
     PCM_ampOfs = ((PCM_ampMul * PCM_OFFSET) >> 2) - PCM_pwmOfs;
     PCM_ampCnt = PCM_NRMSMP;
   }
-  
+
   PCM_playing = 1;
   return true;
 }
 
 
-uint8_t *PCM_getBuf() {
+uint8_t *PCM_getPlayBuf() {
   while (PCM_playing && PCM_busyBuf[PCM_bufWrt]);
   return PCM_dataBuf[PCM_bufWrt];
 }
 
 
-int PCM_pushBuf() {
+int PCM_pushPlayBuf() {
   int16_t a;
   uint16_t c;
 
-  if (PCM_generating || !PCM_running) return false;
+  if (!PCM_playing) return false;
 
   PCM_busyBuf[PCM_bufWrt] = 1;
   if (++PCM_bufWrt == PCM_NUMBUF) PCM_bufWrt = 0;
@@ -200,7 +223,49 @@ int PCM_pushBuf() {
       }
     }
   }
-  
+
+  return true;
+}
+
+
+int PCM_startRec(uint8_t normalize) {
+  uint16_t b,c;
+
+  if (!PCM_running) return false;
+
+  for (b = 0; b < PCM_NUMBUF; b++) {
+    for (c = 0; c < PCM_BUFSIZ; c++)
+      PCM_dataBuf[b][c] = PCM_OFFSET;
+    PCM_busyBuf[b] = 0;
+  }
+  PCM_bufSel = 0;
+  PCM_bufWrt = 0;
+  PCM_bufPtr = 0;
+  PCM_normalize = normalize;
+
+  if (normalize) {
+    PCM_ampMul = PCM_AMPMAX;
+    PCM_ampOfs = ((PCM_ampMul * PCM_OFFSET) >> 2) - PCM_pwmOfs;
+    PCM_ampCnt = PCM_NRMSMP;
+  }
+
+  PCM_recording = 1;
+  return true;
+}
+
+
+uint8_t *PCM_getRecBuf() {
+  while (PCM_recording && !PCM_busyBuf[PCM_bufWrt]);
+  return PCM_dataBuf[PCM_bufWrt];
+}
+
+
+int PCM_releaseRecBuf() {
+  if (!PCM_recording) return false;
+
+  PCM_busyBuf[PCM_bufWrt] = 0;
+  if (++PCM_bufWrt == PCM_NUMBUF) PCM_bufWrt = 0;
+
   return true;
 }
 
@@ -253,7 +318,7 @@ int PCM_startGen(uint16_t frequency, uint8_t ampPercent, uint8_t waveForm) {
     PCM_dataBuf[0][c] = PCM_OFFSET + PCM_MAXVAL * ampPercent * d / 100;
 
   }
-  
+
   PCM_generating = 1;
   return true;
 }
@@ -262,6 +327,7 @@ int PCM_startGen(uint16_t frequency, uint8_t ampPercent, uint8_t waveForm) {
 int PCM_stop() {
   PCM_generating = 0;
   PCM_playing = 0;
+  PCM_recording = 0;
   PCM_OVFHandler = PCM_ISRDummy;
   PCM_running = false;
   return true;
@@ -270,7 +336,7 @@ int PCM_stop() {
 
 #ifdef PCM_USESDLIB
   int PCM_doSDPlay(File *dataFile) {
-    
+
     if (PCM_generating || !PCM_running) return false;
 
     while (PCM_busyBuf[PCM_bufWrt] == 1);
