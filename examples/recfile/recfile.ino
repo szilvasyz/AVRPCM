@@ -4,7 +4,7 @@
 #include "SdFat.h"
 
 
-#define REC_SAMPLE_RATE 16000
+#define REC_SAMPLE_RATE 44100
 
 
 #define SD_CS 4
@@ -88,9 +88,15 @@ void loop() {
   Serial.println("Press to record");
   while (btn.get() == 0);
 
-  sprintf(nBuf, "rec%05d.wav", recNo);
+  while (true) {
+    sprintf(nBuf, "rec%05d.wav", recNo);
+    if (!dir.exists(nBuf))
+      break;
+    recNo++;
+  }
   Serial.print("File open: ");
-  Serial.println(dataFile.open(nBuf, O_RDWR | O_CREAT));
+  //Serial.println(dataFile.open(nBuf, O_RDWR | O_CREAT));
+  Serial.println(dataFile.createContiguous(nBuf, 512UL * 2048 * 20 ));
   Serial.print("Recording file ");
   Serial.println(nBuf);
 
@@ -105,7 +111,10 @@ void recFile(File32 *f) {
   uint32_t ds = 0, ss = 0;
 
   if (f->isWritable()) {
+    Serial.print("!");
+    //Serial.print(f->seekSet(1024L * 1024L));
     W.createBuffer(sr, 1, 8);
+    f->seekSet(0);
     f->write(W.getBuffer(), WAVHDR_LEN);
 
     Serial.print("Setup: ");
@@ -116,7 +125,7 @@ void recFile(File32 *f) {
     while (btn.get() == 0) {
       f->write(PCM_getRecBuf(), PCM_BUFSIZ);
       PCM_releaseRecBuf();
-      ss += PCM_BUFSIZ;      
+      ss += PCM_BUFSIZ;
       if ((++ds % 100) == 0) {
         Serial.print(".");
         if (ds >= 4000) {
