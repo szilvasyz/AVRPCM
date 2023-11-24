@@ -4,7 +4,7 @@
 #include "SdFat.h"
 
 
-#define REC_SAMPLE_RATE 44100
+#define REC_SAMPLE_RATE 16000
 
 
 #define SD_CS 4
@@ -20,6 +20,7 @@
 #endif
 
 #define ANA_INPIN A0
+#define ANA_PREAMP A1
 
 #define BT1_PIN 18
 #define BT2_PIN 19
@@ -35,6 +36,7 @@ SdFat sd;
 WAVhdr W;
 
 
+int preamp = 0;
 int sdready = false;
 File32 dir;
 File32 file;
@@ -86,23 +88,42 @@ void loop() {
   int b;
 
   Serial.println("Press to record");
-  while (btn.get() == 0);
 
-  while (true) {
-    sprintf(nBuf, "rec%05d.wav", recNo);
-    if (!dir.exists(nBuf))
+  while (btn.peek() == 0);
+  switch (btn.get()) {
+    case 1:
+      while (true) {
+        sprintf(nBuf, "rec%05d.wav", recNo);
+        if (!dir.exists(nBuf))
+          break;
+        recNo++;
+      }
+      Serial.print("File open: ");
+      //Serial.println(dataFile.open(nBuf, O_RDWR | O_CREAT));
+      Serial.println(dataFile.createContiguous(nBuf, 512UL * 2048 * 20 ));
+      Serial.print("Recording file ");
+      Serial.println(nBuf);
+
+      recFile(&dataFile);
+      dataFile.close();
+      recNo++;
       break;
-    recNo++;
-  }
-  Serial.print("File open: ");
-  //Serial.println(dataFile.open(nBuf, O_RDWR | O_CREAT));
-  Serial.println(dataFile.createContiguous(nBuf, 512UL * 2048 * 20 ));
-  Serial.print("Recording file ");
-  Serial.println(nBuf);
+    case 2:
+      preamp = 1 - preamp;
+      Serial.print("Preamp :");
+      Serial.println(preamp ? "6dB" : "0dB");
+      if (preamp) {
+        digitalWrite(ANA_PREAMP, LOW);
+        pinMode(ANA_PREAMP, OUTPUT);
+      }
+      else {
+        digitalWrite(ANA_PREAMP, LOW);
+        pinMode(ANA_PREAMP, INPUT);
+      }
+      break;
 
-  recFile(&dataFile);
-  dataFile.close();
-  recNo++;
+  }
+
 }
 
 

@@ -2,5 +2,6 @@
     "configuration": "bootloader=uart0,eeprom=keep,pinout=standard,variant=modelP,BOD=2v7,LTO=Os_flto,clock=16MHz_external",
     "board": "MightyCore:avr:644",
     "sketch": "examples/playfiles/playfiles.ino",
-    "port": "/dev/tty.usbserial-0001"
+    "port": "/dev/tty.usbserial-0001",
+    "programmer": "Arduino"
 }
