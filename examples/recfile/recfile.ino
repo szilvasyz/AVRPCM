@@ -100,9 +100,26 @@ void loop() {
   Serial.print("Recording file ");
   Serial.println(nBuf);
 
-  recFile(&dataFile);
-  dataFile.close();
-  recNo++;
+      recFile(&dataFile);
+      dataFile.close();
+      recNo++;
+      break;
+    case 2:
+      preamp = 1 - preamp;
+      Serial.print("Preamp :");
+      Serial.println(preamp ? "12dB" : "0dB");
+      if (preamp) {
+        digitalWrite(ANA_PREAMP, LOW);
+        pinMode(ANA_PREAMP, OUTPUT);
+      }
+      else {
+        digitalWrite(ANA_PREAMP, LOW);
+        pinMode(ANA_PREAMP, INPUT);
+      }
+      break;
+
+  }
+
 }
 
 

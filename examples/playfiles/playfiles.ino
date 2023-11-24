@@ -15,6 +15,9 @@
 #define DIG_OUTPIN  14
 #endif
 
+#define ANA_ATTEN A2
+
+
 #define BT1_PIN 18
 #define BT2_PIN 19
 
@@ -30,6 +33,7 @@ WAVhdr W;
 
 
 int sdready = false;
+int atten = 0;
 File32 dir;
 File32 file;
 File32 dataFile;
@@ -150,6 +154,7 @@ int findNextWav() {
 void playFile(File32 *f) {
   uint16_t sr = 48000;
   uint32_t ds = 0, ss = 0;
+  int pp = 1;
   int pct;
   int pct0 = 0;
 
@@ -164,7 +169,7 @@ void playFile(File32 *f) {
       Serial.print("Start play: ");
       Serial.println(PCM_startPlay(true));
 
-      while (ss < ds) {
+      while ((ss < ds) && pp) {
         f->read(PCM_getPlayBuf(), PCM_BUFSIZ);
         PCM_pushPlayBuf();
         ss += PCM_BUFSIZ;
@@ -177,9 +182,24 @@ void playFile(File32 *f) {
             Serial.print("%");
           }
         }
-        if (btn.get() != 0) {
-          Serial.print(" -break-");
-          break;
+        switch (btn.get()) {
+          case 1:
+            Serial.print(" -break-");
+            pp = 0;
+            break;
+          case 2:
+            atten = 1 - atten;
+            Serial.print("Attenuation :");
+            Serial.println(atten ? "12dB" : "0dB");
+            if (atten == 0) {
+              digitalWrite(ANA_ATTEN, LOW);
+              pinMode(ANA_ATTEN, INPUT);
+            }
+            else {
+              digitalWrite(ANA_ATTEN, LOW);
+              pinMode(ANA_ATTEN, OUTPUT);
+            }
+            break;
         }
       }
       Serial.println();
