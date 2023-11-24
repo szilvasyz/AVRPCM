@@ -20,6 +20,7 @@
 #endif
 
 #define ANA_INPIN A0
+#define ANA_PREAMP A1
 
 #define BT1_PIN 18
 #define BT2_PIN 19
@@ -36,6 +37,7 @@ WAVhdr W;
 
 
 int sdready = false;
+int preamp = 0;
 File32 dir;
 File32 file;
 File32 dataFile;
@@ -86,19 +88,21 @@ void loop() {
   int b;
 
   Serial.println("Press to record");
-  while (btn.get() == 0);
+  while (btn.peek() == 0);
 
-  while (true) {
-    sprintf(nBuf, "rec%05d.wav", recNo);
-    if (!dir.exists(nBuf))
-      break;
-    recNo++;
-  }
-  Serial.print("File open: ");
-  //Serial.println(dataFile.open(nBuf, O_RDWR | O_CREAT));
-  Serial.println(dataFile.createContiguous(nBuf, 512UL * 2048 * 20 ));
-  Serial.print("Recording file ");
-  Serial.println(nBuf);
+  switch (btn.get()) {
+    case 1:
+      while (true) {
+        sprintf(nBuf, "rec%05d.wav", recNo);
+        if (!dir.exists(nBuf))
+          break;
+        recNo++;
+      }
+      Serial.print("File open: ");
+      //Serial.println(dataFile.open(nBuf, O_RDWR | O_CREAT));
+      Serial.println(dataFile.createContiguous(nBuf, 512UL * 2048 * 20 ));
+      Serial.print("Recording file ");
+      Serial.println(nBuf);
 
       recFile(&dataFile);
       dataFile.close();
