@@ -56,6 +56,9 @@ uint8_t *PCM_getRecBuf();
 int PCM_releaseRecBuf();
 int PCM_startGen(uint16_t frequency, uint8_t ampPercent, uint8_t waveForm);
 int PCM_stop();
+void PCM_clearOverrun();
+uint32_t PCM_getOverrun();
+void PCM_setPause(uint8_t p);
 
 #ifdef PCM_USESDLIB
   int PCM_doSDPlay(File *dataFile);

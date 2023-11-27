@@ -2,8 +2,8 @@
 
 // #define PCM_BUFSIZ 256
 // #define PCM_NUMBUF 3
-#define PCM_BUFSIZ 128
-#define PCM_NUMBUF 6
+#define PCM_BUFSIZ 256
+#define PCM_NUMBUF 16
 // #define PCM_NRMPCT 98
 // #define PCM_NRMSMP 10
 // #define PCM_AMPMAX 80

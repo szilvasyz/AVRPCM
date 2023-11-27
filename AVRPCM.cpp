@@ -24,9 +24,10 @@ uint8_t PCM_normalize;
 // data buffers
 volatile uint8_t PCM_dataBuf[PCM_NUMBUF][PCM_BUFSIZ];
 volatile uint8_t PCM_busyBuf[PCM_NUMBUF];
-volatile uint8_t PCM_bufSel = 0;
+volatile uint16_t PCM_bufSel = 0;
 volatile uint16_t PCM_bufPtr = 0;
-uint8_t PCM_bufWrt = 0;
+volatile uint16_t PCM_bufWrt = 0;
+volatile uint32_t PCM_overrun = 0;
 
 // waveform generating
 volatile uint16_t PCM_fStep;
@@ -37,6 +38,7 @@ volatile uint16_t PCM_fShft;
 volatile uint8_t PCM_playing = false;
 volatile uint8_t PCM_recording = false;
 volatile uint8_t PCM_generating = false;
+volatile uint8_t PCM_paused = false;
 uint8_t PCM_running = false;
 
 
@@ -59,6 +61,8 @@ void PCM_ISR() {
 
   uint16_t d = PCM_pwmOfs;
 
+  if (PCM_paused) return;
+
   if (--pwmCnt != 0) return;
   pwmCnt = PCM_pwmMul;
 
@@ -80,6 +84,8 @@ void PCM_ISR() {
         if (PCM_bufSel == PCM_NUMBUF) PCM_bufSel = 0;
       }
     }
+    else
+      PCM_overrun++;
   }
 
   if (PCM_recording) {
@@ -88,10 +94,12 @@ void PCM_ISR() {
       PCM_dataBuf[PCM_bufSel][PCM_bufPtr] = d;
       if (++PCM_bufPtr == PCM_BUFSIZ) {
         PCM_bufPtr = 0;
-        PCM_busyBuf[PCM_bufSel++] = 1;
-        if (PCM_bufSel == PCM_NUMBUF) PCM_bufSel = 0;
+        PCM_busyBuf[PCM_bufSel] = 1;
+        if (++PCM_bufSel == PCM_NUMBUF) PCM_bufSel = 0;
       }
     }
+    else
+      PCM_overrun++;
   }
 
   if (PCM_generating || PCM_playing) {
@@ -130,6 +138,10 @@ int PCM_init(int digOutPin, int anaInPin = A0) {
 int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
   uint16_t pwmFrq;
 
+  PCM_playing = false;
+  PCM_recording = false;
+  PCM_generating = false;
+
   PCM_sampleRate = sampleRate;
 
   PCM_pwmMul = 48000 / sampleRate;
@@ -163,6 +175,7 @@ int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
 
   PCM_OVFHandler = PCM_ISR;
   PCM_running = true;
+  PCM_paused = true;
   return true;
 }
 
@@ -178,7 +191,7 @@ int PCM_startPlay(uint8_t normalize) {
   for (b = 0; b < PCM_NUMBUF; b++) {
     for (c = 0; c < PCM_BUFSIZ; c++)
       PCM_dataBuf[b][c] = PCM_OFFSET;
-    PCM_busyBuf[b] = 0;
+    PCM_busyBuf[b] = 1;
   }
   PCM_bufSel = 0;
   PCM_bufWrt = 0;
@@ -191,6 +204,8 @@ int PCM_startPlay(uint8_t normalize) {
     PCM_ampCnt = PCM_NRMSMP;
   }
 
+  PCM_overrun = 0;
+  PCM_paused = 0;
   PCM_playing = 1;
   return true;
 }
@@ -198,7 +213,7 @@ int PCM_startPlay(uint8_t normalize) {
 
 uint8_t *PCM_getPlayBuf() {
   while (PCM_playing && PCM_busyBuf[PCM_bufWrt]);
-  return PCM_dataBuf[PCM_bufWrt];
+  return (uint8_t *)PCM_dataBuf[PCM_bufWrt];
 }
 
 
@@ -249,6 +264,8 @@ int PCM_startRec(uint8_t normalize) {
     PCM_ampCnt = PCM_NRMSMP;
   }
 
+  PCM_overrun = 0;
+  PCM_paused = 0;
   PCM_recording = 1;
   return true;
 }
@@ -256,7 +273,7 @@ int PCM_startRec(uint8_t normalize) {
 
 uint8_t *PCM_getRecBuf() {
   while (PCM_recording && PCM_busyBuf[PCM_bufWrt] == 0);
-  return PCM_dataBuf[PCM_bufWrt];
+  return (uint8_t *)PCM_dataBuf[PCM_bufWrt];
 }
 
 
@@ -331,6 +348,21 @@ int PCM_stop() {
   PCM_OVFHandler = PCM_ISRDummy;
   PCM_running = false;
   return true;
+}
+
+
+void PCM_clearOverrun() {
+  PCM_overrun = 0;
+}
+
+
+uint32_t PCM_getOverrun() {
+  return PCM_overrun;
+}
+
+
+void PCM_setPause(uint8_t p) {
+  PCM_paused = p;
 }
 
 
