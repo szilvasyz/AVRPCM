@@ -59,6 +59,11 @@ int PCM_stop();
 void PCM_clearOverrun();
 uint32_t PCM_getOverrun();
 void PCM_setPause(uint8_t p);
+void PCM_setPlayInv(uint8_t inv);
+void PCM_setRecInv(uint8_t inv);
+uint8_t PCM_getPlayInv();
+uint8_t PCM_getRecInv();
+
 
 #ifdef PCM_USESDLIB
   int PCM_doSDPlay(File *dataFile);

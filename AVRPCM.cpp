@@ -11,6 +11,8 @@ uint8_t PCM_anaInChannel;
 // PWM generation
 volatile uint16_t PCM_pwmMul = 1;
 volatile uint16_t PCM_pwmOfs = 128;
+volatile uint8_t PCM_playInv = 0;
+volatile uint8_t PCM_recInv = 0;
 uint16_t PCM_pwmTop;
 uint16_t PCM_sampleRate;
 
@@ -91,6 +93,9 @@ void PCM_ISR() {
   if (PCM_recording) {
     if (PCM_busyBuf[PCM_bufSel] == 0) {
       d = ADCH;
+      if (PCM_recInv) {
+        d = (-d) & 0xFF; 
+      }
       PCM_dataBuf[PCM_bufSel][PCM_bufPtr] = d;
       if (++PCM_bufPtr == PCM_BUFSIZ) {
         PCM_bufPtr = 0;
@@ -103,6 +108,9 @@ void PCM_ISR() {
   }
 
   if (PCM_generating || PCM_playing) {
+    if (PCM_playInv) {
+      d = (PCM_pwmOfs << 1) - d;
+    }
     OCR1A = d;
     if (d > PCM_pwmOfs)
       *PCM_digOutPort |= PCM_digOutMask;
@@ -363,6 +371,26 @@ uint32_t PCM_getOverrun() {
 
 void PCM_setPause(uint8_t p) {
   PCM_paused = p;
+}
+
+
+void PCM_setPlayInv(uint8_t inv) {
+  PCM_playInv = inv;
+}
+
+
+void PCM_setRecInv(uint8_t inv) {
+  PCM_recInv = inv;
+}
+
+
+uint8_t PCM_getPlayInv() {
+  return PCM_playInv;
+}
+
+
+uint8_t PCM_getRecInv() {
+  return PCM_recInv;
 }
 
 
