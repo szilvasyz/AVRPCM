@@ -1,4 +1,7 @@
+//#define DEBUGPCM
+
 //#define PCM_USESDLIB
+
 
 // #define PCM_BUFSIZ 256
 // #define PCM_NUMBUF 3

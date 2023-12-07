@@ -4,22 +4,28 @@
 // ports
 int PCM_digOutPin;
 int PCM_anaOutPin;
-volatile uint8_t *PCM_digOutPort;
+uint8_t *PCM_digOutPort;
 uint8_t PCM_digOutMask;
+uint8_t PCM_digOutInvMask;
+uint8_t PCM_digOutHi = 0;
+uint8_t PCM_digOutLo = 0;
 uint8_t PCM_anaInChannel;
 
+
 // PWM generation
-volatile uint16_t PCM_pwmMul = 1;
-volatile uint16_t PCM_pwmOfs = 128;
-volatile uint8_t PCM_playInv = 0;
-volatile uint8_t PCM_recInv = 0;
+uint16_t PCM_pwmMul = 1;
+uint16_t PCM_pwmOfs = 128;
+uint8_t PCM_playInv = 0;
+uint8_t PCM_recInv = 0;
 uint16_t PCM_pwmTop;
 uint16_t PCM_sampleRate;
+uint8_t PCM_downSample = 0;
+
 
 // PWM amplifying/normalizing
-volatile uint16_t PCM_ampMul = 4;
-volatile uint16_t PCM_ampOfs = 128;
-volatile uint16_t PCM_ampNrm = 120;
+uint16_t PCM_ampMul = 4;
+uint16_t PCM_ampOfs = 128;
+uint16_t PCM_ampNrm = 120;
 uint8_t PCM_ampCnt;
 uint8_t PCM_normalize;
 
@@ -32,15 +38,15 @@ volatile uint16_t PCM_bufWrt = 0;
 volatile uint32_t PCM_overrun = 0;
 
 // waveform generating
-volatile uint16_t PCM_fStep;
-volatile uint16_t PCM_fSMax;
-volatile uint16_t PCM_fShft;
+uint16_t PCM_fStep;
+uint16_t PCM_fSMax;
+uint16_t PCM_fShft;
 
 // modes
-volatile uint8_t PCM_playing = false;
-volatile uint8_t PCM_recording = false;
-volatile uint8_t PCM_generating = false;
-volatile uint8_t PCM_paused = false;
+uint8_t PCM_playing = false;
+uint8_t PCM_recording = false;
+uint8_t PCM_generating = false;
+uint8_t PCM_paused = false;
 uint8_t PCM_running = false;
 
 
@@ -60,13 +66,17 @@ void PCM_ISR() {
   static uint8_t pwmCnt = 1;
   static uint16_t fRatio = 0;
   static uint16_t fSNum = 1;
+  static uint8_t pcmflip = 0;
 
-  uint16_t d = PCM_pwmOfs;
+  static uint16_t d;
 
   if (PCM_paused) return;
 
+  pcmflip = !pcmflip;
+
   if (--pwmCnt != 0) return;
   pwmCnt = PCM_pwmMul;
+  d = PCM_pwmOfs;
 
   if (PCM_generating) {
     fRatio += PCM_fStep;
@@ -79,8 +89,11 @@ void PCM_ISR() {
 
   if (PCM_playing) {
     if (PCM_busyBuf[PCM_bufSel] == 1) {
-      d = ((PCM_ampMul * PCM_dataBuf[PCM_bufSel][PCM_bufPtr]) >> 2) - PCM_ampOfs;
-      if (++PCM_bufPtr == PCM_BUFSIZ) {
+      d = PCM_dataBuf[PCM_bufSel][PCM_bufPtr++];
+      if (PCM_downSample)
+        d = (d + PCM_dataBuf[PCM_bufSel][PCM_bufPtr++]) >> 1;
+      d = ((PCM_ampMul * d) >> 2) - PCM_ampOfs;
+      if (PCM_bufPtr == PCM_BUFSIZ) {
         PCM_bufPtr = 0;
         PCM_busyBuf[PCM_bufSel++] = 0;
         if (PCM_bufSel == PCM_NUMBUF) PCM_bufSel = 0;
@@ -108,14 +121,14 @@ void PCM_ISR() {
   }
 
   if (PCM_generating || PCM_playing) {
-    if (PCM_playInv) {
-      d = (PCM_pwmOfs << 1) - d;
-    }
+  
     OCR1A = d;
+
     if (d > PCM_pwmOfs)
-      *PCM_digOutPort |= PCM_digOutMask;
+      *PCM_digOutPort = *PCM_digOutPort & PCM_digOutInvMask | PCM_digOutHi;
     else
-      *PCM_digOutPort &= ~PCM_digOutMask;
+      *PCM_digOutPort = *PCM_digOutPort & PCM_digOutInvMask | PCM_digOutLo;
+
   }
 }
 
@@ -138,6 +151,7 @@ int PCM_init(int digOutPin, int anaInPin = A0) {
   // for fast register-level access
   PCM_digOutPort = portOutputRegister(digitalPinToPort(digOutPin));
   PCM_digOutMask = digitalPinToBitMask(digOutPin);
+  PCM_digOutInvMask = ~PCM_digOutMask;
 
   return true;
 }
@@ -152,15 +166,35 @@ int PCM_setupPWM(uint16_t sampleRate, uint8_t invert) {
 
   PCM_sampleRate = sampleRate;
 
-  PCM_pwmMul = 48000 / sampleRate;
+  if (PCM_sampleRate > 32000) {
+    PCM_downSample = 1;
+    PCM_sampleRate /= 2;
+  }
+  else
+    PCM_downSample = 0;
+
+  PCM_playInv = invert;
+  PCM_recInv = invert;
+  
+  PCM_pwmMul = 32000 / PCM_sampleRate;
   if (PCM_pwmMul == 0) PCM_pwmMul = 1;
-  pwmFrq = PCM_pwmMul * sampleRate;
+  pwmFrq = PCM_pwmMul * PCM_sampleRate;
   if (pwmFrq > F_CPU / 256)
     return false;
 
   PCM_pwmTop = F_CPU / pwmFrq - 1;
   PCM_pwmOfs = (PCM_pwmTop + 1) >> 1;
-  PCM_ampNrm = (PCM_pwmTop + 1) * PCM_NRMPCT / 200;
+  PCM_ampNrm = (long)(PCM_pwmTop + 1) * PCM_NRMPCT / 200;
+
+  #ifdef DEBUGPCM
+    Serial.print("PCM_sampleRate:"); Serial.println(PCM_sampleRate);
+    Serial.print("PCM_downSample:"); Serial.println(PCM_downSample);
+    Serial.print("PCM_pwmMul    :"); Serial.println(PCM_pwmMul);
+    Serial.print("pwmFrq        :"); Serial.println(pwmFrq);
+    Serial.print("PCM_pwmTop    :"); Serial.println(PCM_pwmTop);
+    Serial.print("PCM_pwmOfs    :"); Serial.println(PCM_pwmOfs);
+    Serial.print("PCM_ampNrm    :"); Serial.println(PCM_ampNrm);
+  #endif
 
   // TIMER1 setup: fast PWM on OCR1A
   // set TOP in ICR1
@@ -376,6 +410,20 @@ void PCM_setPause(uint8_t p) {
 
 void PCM_setPlayInv(uint8_t inv) {
   PCM_playInv = inv;
+
+  if (!PCM_running) return;
+
+  if (inv) {
+    TCCR1A = _BV(COM1A1) | _BV(COM1A0) | _BV(WGM11);
+    PCM_digOutHi = 0;
+    PCM_digOutLo = PCM_digOutMask;
+  }
+  else {
+    TCCR1A = _BV(COM1A1) | _BV(WGM11);
+    PCM_digOutLo = 0;
+    PCM_digOutHi = PCM_digOutMask;
+  }
+
 }
 
 
