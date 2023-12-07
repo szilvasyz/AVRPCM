@@ -4,7 +4,7 @@
 // ports
 int PCM_digOutPin;
 int PCM_anaOutPin;
-uint8_t *PCM_digOutPort;
+volatile uint8_t *PCM_digOutPort;
 uint8_t PCM_digOutMask;
 uint8_t PCM_digOutInvMask;
 uint8_t PCM_digOutHi = 0;
@@ -152,7 +152,8 @@ int PCM_init(int digOutPin, int anaInPin = A0) {
   PCM_digOutPort = portOutputRegister(digitalPinToPort(digOutPin));
   PCM_digOutMask = digitalPinToBitMask(digOutPin);
   PCM_digOutInvMask = ~PCM_digOutMask;
-
+  PCM_digOutHi = PCM_digOutMask;
+  PCM_digOutLo = 0;
   return true;
 }
 
