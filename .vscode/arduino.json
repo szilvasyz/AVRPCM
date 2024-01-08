@@ -1,4 +1,5 @@
 {
     "board": "MightyCore:avr:644",
-    "port": "/dev/tty.usbserial-0001"
+    "port": "/dev/tty.usbserial-0001",
+    "sketch": "examples\\recfile\\recfile.ino"
 }

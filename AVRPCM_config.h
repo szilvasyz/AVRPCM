@@ -1,12 +1,15 @@
 //#define DEBUGPCM
 
+// IRQ running time debugging on an output pin
+//#define PCM_IRQDEBUG 0
+
 //#define PCM_USESDLIB
 
 
 // #define PCM_BUFSIZ 256
 // #define PCM_NUMBUF 3
-#define PCM_BUFSIZ 256
-#define PCM_NUMBUF 16
+#define PCM_BUFSIZ 512
+#define PCM_NUMBUF 4
 // #define PCM_NRMPCT 98
 // #define PCM_NRMSMP 10
 // #define PCM_AMPMAX 80

@@ -11,6 +11,11 @@ uint8_t PCM_digOutHi = 0;
 uint8_t PCM_digOutLo = 0;
 uint8_t PCM_anaInChannel;
 
+#ifdef PCM_IRQDEBUG
+  volatile uint8_t *PCM_debugPort;
+  uint8_t PCM_debugMask;
+  uint8_t PCM_debugInvMask;
+#endif
 
 // PWM generation
 uint16_t PCM_pwmMul = 1;
@@ -70,11 +75,25 @@ void PCM_ISR() {
 
   static uint16_t d;
 
-  if (PCM_paused) return;
+  #ifdef PCM_IRQDEBUG
+    *PCM_debugPort &= PCM_debugInvMask;
+  #endif
+
+  if (PCM_paused) {
+    #ifdef PCM_IRQDEBUG
+      *PCM_debugPort |= PCM_debugMask;
+    #endif
+    return;
+  }
 
   pcmflip = !pcmflip;
 
-  if (--pwmCnt != 0) return;
+  if (--pwmCnt != 0) {
+    #ifdef PCM_IRQDEBUG
+      *PCM_debugPort |= PCM_debugMask;
+    #endif
+    return;
+  }
   pwmCnt = PCM_pwmMul;
   d = PCM_pwmOfs;
 
@@ -90,8 +109,10 @@ void PCM_ISR() {
   if (PCM_playing) {
     if (PCM_busyBuf[PCM_bufSel] == 1) {
       d = PCM_dataBuf[PCM_bufSel][PCM_bufPtr++];
-      if (PCM_downSample)
+      if (PCM_downSample) {
         d = (d + PCM_dataBuf[PCM_bufSel][PCM_bufPtr++]) >> 1;
+        //PCM_bufPtr++;
+      }
       d = ((PCM_ampMul * d) >> 2) - PCM_ampOfs;
       if (PCM_bufPtr == PCM_BUFSIZ) {
         PCM_bufPtr = 0;
@@ -107,7 +128,7 @@ void PCM_ISR() {
     if (PCM_busyBuf[PCM_bufSel] == 0) {
       d = ADCH;
       if (PCM_recInv) {
-        d = (-d) & 0xFF; 
+        d = (~d) & 0xFF; 
       }
       PCM_dataBuf[PCM_bufSel][PCM_bufPtr] = d;
       if (++PCM_bufPtr == PCM_BUFSIZ) {
@@ -130,6 +151,11 @@ void PCM_ISR() {
       *PCM_digOutPort = *PCM_digOutPort & PCM_digOutInvMask | PCM_digOutLo;
 
   }
+
+  #ifdef PCM_IRQDEBUG
+    *PCM_debugPort |= PCM_debugMask;
+  #endif
+
 }
 
 
@@ -148,12 +174,23 @@ int PCM_init(int digOutPin, int anaInPin = A0) {
   ADMUX  = PCM_anaInChannel | _BV(ADLAR);
   ADCSRA = _BV(ADEN) | _BV(ADSC) | _BV(ADATE) | _BV(ADPS2) | _BV(ADPS0);
 
+  #ifdef PCM_IRQDEBUG
+    pinMode(PCM_IRQDEBUG, OUTPUT);
+  #endif
+
   // for fast register-level access
   PCM_digOutPort = portOutputRegister(digitalPinToPort(digOutPin));
   PCM_digOutMask = digitalPinToBitMask(digOutPin);
   PCM_digOutInvMask = ~PCM_digOutMask;
   PCM_digOutHi = PCM_digOutMask;
   PCM_digOutLo = 0;
+
+  #ifdef PCM_IRQDEBUG
+    PCM_debugPort = portOutputRegister(digitalPinToPort(PCM_IRQDEBUG));
+    PCM_debugMask = digitalPinToBitMask(PCM_IRQDEBUG);
+    PCM_debugInvMask = ~digitalPinToBitMask(PCM_IRQDEBUG);
+  #endif
+
   return true;
 }
 
