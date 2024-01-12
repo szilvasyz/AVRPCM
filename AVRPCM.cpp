@@ -131,6 +131,8 @@ void PCM_ISR() {
         d = (~d) & 0xFF; 
       }
       PCM_dataBuf[PCM_bufSel][PCM_bufPtr] = d;
+      if (PCM_downSample) {
+        PCM_dataBuf[PCM_bufSel][++PCM_bufPtr] = d;      }
       if (++PCM_bufPtr == PCM_BUFSIZ) {
         PCM_bufPtr = 0;
         PCM_busyBuf[PCM_bufSel] = 1;
